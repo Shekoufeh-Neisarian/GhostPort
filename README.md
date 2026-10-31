@@ -1,37 +1,33 @@
-👻 **GhostPort — Beyond the Firewall — UDP-to-TCP Firewall Bypass & Command Injection**
+
+# 👻 GhostPort — Beyond the Firewall
+
+**UDP-to-TCP Firewall Bypass & Command Injection**
 
 This project demonstrates how an exposed UDP maintenance service can bypass TCP firewall restrictions and lead to command execution.
 
-**• Windows VM · Kali Linux · VMware · Python Flask · iptables**
+**Environment:** Windows VM · Kali Linux · VMware · Python Flask · iptables
 
 <img width="1024" height="1536" alt="image" src="https://github.com/user-attachments/assets/6d550e13-9132-412a-b4d1-e0111f5cedff" />
 
-
-# 1. Goal of the project
+## 1. Goal of the project
 
 Demonstrating that blocking TCP traffic does not necessarily make a Windows web server secure. The key lesson is that an allowed UDP service can provide an indirect route to a blocked TCP application.
 
+## 2. Project steps
 
-# 2. Project steps
-
-## 2.1. Overview
+### 2.1. Overview
 
 - Run a vulnerable Flask web application on Windows.
-
 - Place Kali Linux between host and Windows as a firewall.
-
 - Use `iptables` to block TCP and allow UDP.
-
 - Discover an undocumented maintenance service.
-
 - Exploit the service to execute `whoami` on Windows despite the TCP firewall.
 
-## 2.2. Our network setup
+### 2.2. Our network setup
 
 <img width="1092" height="1440" alt="image" src="https://github.com/user-attachments/assets/b427835b-eada-47fe-bbd4-be47966e78eb" />
 
-
-## 2.3. Run the Windows web server
+### 2.3. Run the Windows web server
 
 On Windows VM — PowerShell as Administrator
 
@@ -58,15 +54,25 @@ http://10.10.10.131:7777
 
 The following confirms that the web application is successfully accessible from the host, with the browser URL visible.
 
-
 <img width="840" height="776" alt="image" src="https://github.com/user-attachments/assets/0318cf66-f79c-4013-b563-8f21cee69b56" />
 
+### 2.4. Configure Kali as the gateway
 
+#### 2.4.1. Configure the virtual networks
 
+In VMware, we configure:
 
-### 2.4.2. Assign Windows VM IP
+| Machine | Network adapter | Network |
+|---|---|---|
+| Kali | Adapter 1 | NAT (VMnet8) |
+| Kali | Adapter 2 | Custom isolated VMnet2 |
+| Windows | Adapter 1 | Custom isolated VMnet2 |
 
-Windows VM— Administrator PowerShell
+This separates Windows from the external network. Kali becomes its gateway.
+
+#### 2.4.2. Assign Windows VM IP
+
+Windows VM — Administrator PowerShell
 
 After moving the Windows VM adapter to VMnet2:
 
@@ -77,22 +83,15 @@ netsh interface ipv4 set address name="Ethernet0" static 192.168.77.10 255.255.2
 Explanation:
 
 - `Ethernet0`: Windows VM network interface
-
 - `192.168.77.10`: New Windows VM IP
-
 - `255.255.255.0`: Subnet mask
-
 - `192.168.77.1`: Kali gateway
-
 
 <img width="465" height="647" alt="image" src="https://github.com/user-attachments/assets/f2ea181d-dd50-4761-bc80-387498d63678" />
 
+#### 2.4.3. Configure Kali's interfaces
 
-
-
-### 2.4.3. Configure Kali's interfaces
-
-We identify our two interfaces. We use `eth0` for NAT and `eth1` for the internal network. 
+We identify our two interfaces. We use `eth0` for NAT and `eth1` for the internal network.
 
 ```bash
 ip -br addr
@@ -113,11 +112,8 @@ sudo sysctl -w net.ipv4.ip_forward=1
 ```
 
 - `ip addr add`: Assigns an IP to Kali's internal network interface.
-
 - `/24`: Subnet mask equivalent to `255.255.255.0`.
-
 - `ip_forward=1`: Allows Kali to forward packets between interfaces.
-
 - `KALI_IP`: Automatically stores Kali's external IPv4 address.
 
 On Windows VM in PowerShell as Administrator allow ping requests from Kali:
@@ -135,18 +131,13 @@ ping -c 4 192.168.77.10
 ```
 
 - `-c 4`: Send 4 packets.
-
 - `192.168.77.10`: Windows VM's internal IP address.
-
 
 <img width="902" height="305" alt="image" src="https://github.com/user-attachments/assets/609fc94e-939a-40e6-888d-176498451ee8" />
 
-
-
-
 Kali is successfully pinging Windows.
 
-### 2.4.4. Forward traffic using iptables
+#### 2.4.4. Forward traffic using iptables
 
 We first configure Destination Network Address Translation (DNAT). These commands modify the Kali firewall. The reset affects its forwarding and DNAT rules.
 
@@ -170,16 +161,16 @@ sudo iptables -t nat -A PREROUTING -i "$EXT" -d "$KALI_IP" -p udp -j DNAT --to-d
 
 Important syntax:
 
-| Part                      | Meaning                                |
-| ------------------------- | -------------------------------------- |
-| `-t nat`                  | Use the NAT table                      |
-| `-A PREROUTING`           | Add rule before routing                |
-| `-i "$EXT"`               | Packets arriving on external interface |
-| `-d "$KALI_IP"`           | Packets addressed to Kali              |
-| `-p tcp` / `-p udp`       | Match protocol                         |
-| `--dport 7777`            | Destination port 7777                  |
-| `-j DNAT`                 | Change destination IP                  |
-| `--to-destination "$WIN"` | Forward to Windows                     |
+| Part | Meaning |
+|---|---|
+| `-t nat` | Use the NAT table |
+| `-A PREROUTING` | Add rule before routing |
+| `-i "$EXT"` | Packets arriving on external interface |
+| `-d "$KALI_IP"` | Packets addressed to Kali |
+| `-p tcp` / `-p udp` | Match protocol |
+| `--dport 7777` | Destination port 7777 |
+| `-j DNAT` | Change destination IP |
+| `--to-destination "$WIN"` | Forward to Windows |
 
 Now test from the host browser:
 
@@ -189,17 +180,13 @@ http://10.10.10.129:7777
 
 The web application should still open, but now traffic passes through Kali.
 
-
 <img width="902" height="646" alt="image" src="https://github.com/user-attachments/assets/e7b485a3-8c5c-4407-861e-b14d01990fe6" />
-
-
-
 
 Application accessible through Kali's IP.
 
-## 2.5. Block TCP, allow UDP
+### 2.5. Block TCP, allow UDP
 
-On Kali Run:
+On Kali run:
 
 ```bash
 sudo iptables -F FORWARD
@@ -230,22 +217,18 @@ Show firewall:
 sudo iptables -L FORWARD -n -v --line-numbers
 ```
 
-
 <img width="882" height="297" alt="image" src="https://github.com/user-attachments/assets/8a784976-3bf4-4fce-8fc2-7e15fc4fee67" />
-
-
-
 
 Policy:
 
-| Traffic                 | Action          |
-| ----------------------- | --------------- |
-| Host → Windows VM TCP   | DROP            |
-| Host → Windows VM UDP   | ACCEPT          |
-| Windows VM → Host UDP   | ACCEPT          |
+| Traffic | Action |
+|---|---|
+| Host → Windows VM TCP | DROP |
+| Host → Windows VM UDP | ACCEPT |
+| Windows VM → Host UDP | ACCEPT |
 | Other forwarded traffic | DROP by default |
 
-> [!note] Note: 
+> [!NOTE]
 > These rules apply to traffic forwarded through Kali. They do not block all traffic addressed to Kali itself.
 
 **Test the TCP block**
@@ -256,11 +239,7 @@ From host browser, refresh:
 http://10.10.10.129:7777
 ```
 
-
 <img width="950" height="790" alt="image" src="https://github.com/user-attachments/assets/97ed20f7-0ca0-474f-9043-a235868c1807" />
-
-
-
 
 **Test UDP forwarding**
 
@@ -272,9 +251,7 @@ sudo tcpdump -ni "$INT" 'udp and host 192.168.77.10'
 ```
 
 - `-n`: Do not resolve addresses to names.
-
 - `-i`: Capture on the internal interface.
-
 - `udp`: Capture only UDP packets.
 
 On Windows host, we use PowerShell to send a UDP test packet:
@@ -286,36 +263,35 @@ $b = [Text.Encoding]::UTF8.GetBytes("UDP-TEST")
 $u.Close()
 ```
 
-This uses Windows' built-in .NET UDP client, so there is no need to install Netcat on the host. 
+This uses Windows' built-in .NET UDP client, so there is no need to install Netcat on the host.
 
 <img width="942" height="392" alt="image" src="https://github.com/user-attachments/assets/29bae27b-ee64-41d9-b51b-fe2cc0887865" />
 
+`tcpdump` shows UDP traffic forwarded to `192.168.77.10:8888`. This verifies forwarding; the Windows application must also be listening and Windows Firewall must permit the packet for application-level delivery.
 
+### 2.6. Find the vulnerability and bypass the firewall
 
-tcpdump` shows UDP traffic forwarded to `192.168.77.10:8888`. This verifies forwarding; the Windows application must also be listening and Windows Firewall must permit the packet for application-level delivery.
-
-## 2.6. Find the vulnerability and bypass the firewall
-
-### 2.6.1 Examine the vulnerable code
+#### 2.6.1. Examine the vulnerable code
 
 Windows VM — PowerShell
 
-In `server.py` directory, we execute:
+In the `server.py` directory, we execute:
 
 ```powershell
 Select-String -Path .\server.py -Pattern 'MaintenanceService|MAINTENANCE_PORT|SOCK_DGRAM|base64|os.popen|diagnostic' -Context 2,4
 ```
 
-| Code                      | Meaning                              |
-| ------------------------- | ------------------------------------ |
-| `SOCK_DGRAM`              | UDP socket                           |
-| `MAINTENANCE_PORT = 8888` | Hidden UDP service                   |
-| `base64.b64decode()`      | Decodes incoming instructions        |
-| `socket.SOCK_STREAM`      | Opens a TCP connection               |
-| `os.popen(command)`       | Executes an operating-system command |
-| It results in:            |                                      |
+| Code | Meaning |
+|---|---|
+| `SOCK_DGRAM` | UDP socket |
+| `MAINTENANCE_PORT = 8888` | Hidden UDP service |
+| `base64.b64decode()` | Decodes incoming instructions |
+| `socket.SOCK_STREAM` | Opens a TCP connection |
+| `os.popen(command)` | Executes an operating-system command |
 
-```
+The command produces the following matching excerpts (line wrapping reflects the copied terminal output):
+
+```text
   server.py:1:import socket
 > server.py:2:import base64
   server.py:3:import os
@@ -464,7 +440,7 @@ use_reloader=False)
 
 It confirms two security weaknesses in `server.py` that could make the firewall bypass possible.
 
-#### Command injection vulnerability — Line 33
+##### Command injection vulnerability — Line 33
 
 ```python
 base_command = "nslookup"
@@ -492,7 +468,7 @@ nslookup 127.0.0.1 & whoami
 
 On Windows, `&` separates commands. Therefore, `whoami` also executes.
 
-#### Hidden UDP MaintenanceService — Lines 90–109
+##### Hidden UDP MaintenanceService — Lines 90–109
 
 ```python
 MAINTENANCE_PORT = 8888
@@ -509,16 +485,13 @@ decoded = base64.b64decode(payload_str).decode('utf-8')
 This tells us:
 
 - The maintenance service listens on UDP port `8888`.
-
 - It receives Base64-encoded messages.
-
 - It decodes incoming requests.
-
 - It may allow access to the blocked web application, depending on the forwarding logic.
 
 The vulnerability: Kali blocks incoming TCP, but permits UDP. An unprotected UDP maintenance service may allow requests to reach the vulnerable Flask application indirectly.
 
-### 2.6.2 Allow the maintenance service UDP access on Windows
+#### 2.6.2. Allow the maintenance service UDP access on Windows
 
 On Windows VM:
 
@@ -528,14 +501,14 @@ New-NetFirewallRule -DisplayName "P12 Maintenance UDP" -Direction Inbound -Proto
 
 This permits UDP packets to reach the maintenance service without disabling Windows Firewall.
 
-> [!tip] Remark: 
+> [!TIP]
 > In our Agent 007 project we used restrictive Windows outbound firewall rules.
 
 ```powershell
 New-NetFirewallRule -DisplayName "P12 UDP Replies" -Direction Outbound -Protocol UDP -LocalPort 8888 -Action Allow -Profile Any
 ```
 
-### 2.6.3 Exploit the UDP-to-TCP tunnel
+#### 2.6.3. Exploit the UDP-to-TCP tunnel
 
 We run the following in PowerShell on our host machine.
 
@@ -582,41 +555,31 @@ finally {
 
 How the exploit works:
 
-
 <img width="1083" height="1452" alt="image" src="https://github.com/user-attachments/assets/b9580f0b-80fb-44da-b749-5e974256125a" />
 
-
-
-
 <img width="427" height="292" alt="image" src="https://github.com/user-attachments/assets/82a544be-3f2f-4d0c-b43f-23f76f0d4b62" />
-
-
 
 The Base64 response contains the HTTP headers. This means:
 
 - UDP request received a response through the maintenance service.
-
 - The Flask application returned HTTP `200 OK`.
-
 - The UDP-to-TCP bypass is working at the HTTP communication level.
 
-**In simple words:** 
+**In simple words:**
 
 Firewall is bypassed and the UDP request reached the MaintenanceService, which forwarded it to Flask and received `HTTP/1.1 200 OK`.
 
 On Windows VM:
 
-
 <img width="471" height="107" alt="image" src="https://github.com/user-attachments/assets/0b650441-bb93-4d3c-b8af-5c13402a3dc2" />
-
 
 The UDP request bypassed the TCP firewall through the MaintenanceService. The application decoded `%26` into `&`, allowing command injection through the vulnerable `os.popen()` function. The injected `whoami` command executed on the Windows VM, and its output was saved to `C:\Users\Public\p12-proof.txt`.
 
-**Command execution:** 
+**Command execution:**
 
 The Windows VM displays the contents of `p12-proof.txt`, including `shnsrn-dc\sheko`.
 
-# 3. Conclusion
+## 3. Conclusion
 
 In this project, we learned that blocking TCP traffic with a firewall is not enough to keep a web application secure.
 
